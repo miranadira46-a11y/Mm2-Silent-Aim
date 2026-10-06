@@ -1,0 +1,716 @@
+-- Silent Aim MM2 v18 - Instant Fire by uwaiS
+-- Developer: uwaiS
+-- Fix: Manual fire INSTAN tanpa delay
+
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
+
+pcall(function()
+    if CoreGui:FindFirstChild("uwaiSSeparatedV18") then
+        CoreGui.uwaiSSeparatedV18:Destroy()
+    end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "uwaiSSeparatedV18"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = CoreGui
+
+local Config = {
+    TargetPart = "Head",
+    CurrentTarget = nil,
+    Prediction = 0.1,
+    AutoShoot = false,
+    AutoShootDelay = 0.15,
+    ESPMurder = false,
+    ESPSheriff = false,
+    ESPInnocent = false,
+}
+
+local Running = true
+
+-- ============================================
+-- GET ROLE
+-- ============================================
+local function GetRole(plr)
+    if not plr then return "Unknown" end
+    local char = plr.Character
+    
+    if char then
+        for _, t in pairs(char:GetChildren()) do
+            if t:IsA("Tool") then
+                local n = t.Name:lower()
+                if n:find("knife") then return "Murder" end
+                if n:find("gun") or n:find("revolver") then return "Sheriff" end
+            end
+        end
+    end
+    
+    local bp = plr:FindFirstChild("Backpack")
+    if bp then
+        for _, t in pairs(bp:GetChildren()) do
+            if t:IsA("Tool") then
+                local n = t.Name:lower()
+                if n:find("knife") then return "Murder" end
+                if n:find("gun") or n:find("revolver") then return "Sheriff" end
+            end
+        end
+    end
+    
+    for name, value in pairs(plr:GetAttributes()) do
+        local n = name:lower()
+        local v = tostring(value):lower()
+        if n:find("role") or n:find("team") then
+            if v:find("murder") then return "Murder" end
+            if v:find("sheriff") then return "Sheriff" end
+            if v:find("innocent") then return "Innocent" end
+        end
+    end
+    
+    if char then
+        for name, value in pairs(char:GetAttributes()) do
+            local n = name:lower()
+            local v = tostring(value):lower()
+            if n:find("role") or n:find("team") then
+                if v:find("murder") then return "Murder" end
+                if v:find("sheriff") then return "Sheriff" end
+                if v:find("innocent") then return "Innocent" end
+            end
+        end
+    end
+    
+    return "Innocent"
+end
+
+local function IsAlive(plr)
+    if not plr or not plr.Character then return false end
+    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+    return hum and hum.Health > 0
+end
+
+local function GetMurder()
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and IsAlive(plr) then
+            if GetRole(plr) == "Murder" then return plr end
+        end
+    end
+    return nil
+end
+
+-- ============================================
+-- CARI GUN & REMOTE
+-- ============================================
+local function GetGunTool()
+    local char = LocalPlayer.Character
+    if char then
+        for _, t in pairs(char:GetChildren()) do
+            if t:IsA("Tool") then return t end
+        end
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        for _, t in pairs(bp:GetChildren()) do
+            if t:IsA("Tool") then
+                local n = t.Name:lower()
+                if n:find("gun") or n:find("revolver") or n:find("pistol") then
+                    return t
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- SILENT EQUIP TANPA WAIT (langsung pindah parent)
+local function SilentEquipInstant()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local currentTool = char:FindFirstChildOfClass("Tool")
+    if currentTool then return end
+    local gun = GetGunTool()
+    if not gun then return end
+    pcall(function() gun.Parent = char end)
+end
+
+local ShootRemote = nil
+
+local function FindRemote()
+    local char = LocalPlayer.Character
+    if char then
+        for _, t in pairs(char:GetChildren()) do
+            if t:IsA("Tool") then
+                local r = t:FindFirstChild("Shoot")
+                if r and r:IsA("RemoteEvent") then
+                    ShootRemote = r
+                    return r
+                end
+            end
+        end
+    end
+    local bp = LocalPlayer:FindFirstChild("Backpack")
+    if bp then
+        for _, t in pairs(bp:GetChildren()) do
+            if t:IsA("Tool") then
+                local r = t:FindFirstChild("Shoot")
+                if r and r:IsA("RemoteEvent") then
+                    ShootRemote = r
+                    return r
+                end
+                for _, d in pairs(t:GetDescendants()) do
+                    if d:IsA("RemoteEvent") and d.Name:lower():find("shoot") then
+                        ShootRemote = d
+                        return d
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+LocalPlayer.CharacterAdded:Connect(function()
+    ShootRemote = nil
+    task.wait(0.2)
+    FindRemote()
+end)
+
+-- ============================================
+-- FIRE INSTANT (TANPA DELAY)
+-- ============================================
+local function FireInstant(target)
+    if not target or not IsAlive(target) then return false end
+    
+    -- Silent equip INSTAN (gak ada wait)
+    SilentEquipInstant()
+    
+    -- Cari remote kalau belum ada
+    if not ShootRemote or not ShootRemote.Parent then FindRemote() end
+    if not ShootRemote then return false end
+    
+    local part = target.Character:FindFirstChild(Config.TargetPart)
+        or target.Character:FindFirstChild("Head")
+        or target.Character:FindFirstChild("HumanoidRootPart")
+    if not part then return false end
+    
+    local pos = part.Position
+    if Config.Prediction > 0 then
+        local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then pos = pos + (hrp.Velocity * Config.Prediction) end
+    end
+    
+    local origin = Camera.CFrame
+    local myHead = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Head")
+    if myHead then origin = myHead.CFrame end
+    
+    local targetCF = CFrame.new(pos)
+    
+    -- FIRE LANGSUNG (fire & forget, tanpa pcall blocking)
+    ShootRemote:FireServer(origin, targetCF)
+    
+    -- Aktifin gun buat animasi (non-blocking)
+    task.spawn(function()
+        local gun = GetGunTool()
+        if gun then
+            pcall(function() gun:Activate() end)
+        end
+    end)
+    
+    return true
+end
+
+-- ============================================
+-- ESP SYSTEM
+-- ============================================
+local ESPFolder = Instance.new("Folder")
+ESPFolder.Name = "uwaiS_ESP"
+ESPFolder.Parent = ScreenGui
+
+local Highlights = {}
+local LastRoles = {}
+local LastCharacters = {}
+
+local function RemoveESP(plr)
+    if Highlights[plr] then
+        pcall(function() Highlights[plr]:Destroy() end)
+        Highlights[plr] = nil
+    end
+    LastRoles[plr] = nil
+    LastCharacters[plr] = nil
+end
+
+local function AddESP(plr, color, role)
+    if not plr.Character then return end
+    
+    if Highlights[plr] then
+        if LastCharacters[plr] ~= plr.Character then
+            Highlights[plr].Adornee = plr.Character
+            LastCharacters[plr] = plr.Character
+        end
+        if LastRoles[plr] ~= role then
+            Highlights[plr].OutlineColor = color
+            Highlights[plr].FillColor = color
+            LastRoles[plr] = role
+        end
+        return
+    end
+    
+    local hl = Instance.new("Highlight")
+    hl.Name = "uwaiS_HL_" .. plr.Name
+    hl.Adornee = plr.Character
+    hl.FillTransparency = 1
+    hl.OutlineTransparency = 0
+    hl.OutlineColor = color
+    hl.FillColor = color
+    hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    hl.Parent = ESPFolder
+    
+    Highlights[plr] = hl
+    LastRoles[plr] = role
+    LastCharacters[plr] = plr.Character
+end
+
+local function UpdateESP()
+    if not Running then return end
+    for _, plr in pairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and IsAlive(plr) then
+            local role = GetRole(plr)
+            if role == "Murder" and Config.ESPMurder then
+                AddESP(plr, Color3.fromRGB(255, 0, 0), "Murder")
+            elseif role == "Sheriff" and Config.ESPSheriff then
+                AddESP(plr, Color3.fromRGB(0, 100, 255), "Sheriff")
+            elseif role == "Innocent" and Config.ESPInnocent then
+                AddESP(plr, Color3.fromRGB(0, 255, 0), "Innocent")
+            else
+                RemoveESP(plr)
+            end
+        else
+            RemoveESP(plr)
+        end
+    end
+end
+
+local function HookPlayer(plr)
+    plr.CharacterAdded:Connect(function()
+        task.wait(0.1)
+        if Highlights[plr] then
+            pcall(function() Highlights[plr]:Destroy() end)
+            Highlights[plr] = nil
+            LastRoles[plr] = nil
+            LastCharacters[plr] = nil
+        end
+        UpdateESP()
+    end)
+end
+
+Players.PlayerAdded:Connect(function(plr)
+    HookPlayer(plr)
+    task.wait(0.1)
+    UpdateESP()
+end)
+
+Players.PlayerRemoving:Connect(function(plr)
+    RemoveESP(plr)
+end)
+
+for _, plr in pairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        HookPlayer(plr)
+    end
+end
+
+-- ============================================
+-- FUNGSI DRAG + INSTANT CALLBACK
+-- ============================================
+local function MakeDraggable(btn, callback)
+    local dragging = false
+    local startPos = nil
+    local startMousePos = nil
+    local hasMoved = false
+    local DRAG_THRESHOLD = 12
+    
+    btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            hasMoved = false
+            startPos = btn.Position
+            startMousePos = input.Position
+        end
+    end)
+    
+    btn.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement 
+            or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - startMousePos
+            if math.abs(delta.X) > DRAG_THRESHOLD or math.abs(delta.Y) > DRAG_THRESHOLD then
+                hasMoved = true
+            end
+            if hasMoved then
+                btn.Position = UDim2.new(
+                    startPos.X.Scale, startPos.X.Offset + delta.X,
+                    startPos.Y.Scale, startPos.Y.Offset + delta.Y
+                )
+            end
+        end
+    end)
+    
+    -- INSTANT CALLBACK di InputEnded (gak pake task.wait)
+    btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 
+            or input.UserInputType == Enum.UserInputType.Touch then
+            if dragging and not hasMoved then
+                if callback then callback() end
+            end
+            dragging = false
+            hasMoved = false
+        end
+    end)
+end
+
+-- ============================================
+-- TOMBOL MANUAL SHOOT
+-- ============================================
+local ShootManualBtn = Instance.new("TextButton")
+ShootManualBtn.Size = UDim2.new(0, 70, 0, 70)
+ShootManualBtn.Position = UDim2.new(0, 20, 0.5, -35)
+ShootManualBtn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+ShootManualBtn.Text = "🔫"
+ShootManualBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ShootManualBtn.TextSize = 32
+ShootManualBtn.Font = Enum.Font.GothamBold
+ShootManualBtn.Active = true
+ShootManualBtn.AutoButtonColor = false
+ShootManualBtn.Parent = ScreenGui
+
+local SMC = Instance.new("UICorner")
+SMC.CornerRadius = UDim.new(1, 0)
+SMC.Parent = ShootManualBtn
+
+local SMStroke = Instance.new("UIStroke")
+SMStroke.Color = Color3.fromRGB(255, 100, 100)
+SMStroke.Thickness = 2
+SMStroke.Transparency = 0.3
+SMStroke.Parent = ShootManualBtn
+
+-- ============================================
+-- TOMBOL AUTO SHOOT
+-- ============================================
+local AutoToggleBtn = Instance.new("TextButton")
+AutoToggleBtn.Size = UDim2.new(0, 70, 0, 70)
+AutoToggleBtn.Position = UDim2.new(0, 20, 0.5, 45)
+AutoToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 120)
+AutoToggleBtn.Text = "🔁"
+AutoToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoToggleBtn.TextSize = 32
+AutoToggleBtn.Font = Enum.Font.GothamBold
+AutoToggleBtn.Active = true
+AutoToggleBtn.AutoButtonColor = false
+AutoToggleBtn.Parent = ScreenGui
+
+local ATC = Instance.new("UICorner")
+ATC.CornerRadius = UDim.new(1, 0)
+ATC.Parent = AutoToggleBtn
+
+local ATStroke = Instance.new("UIStroke")
+ATStroke.Color = Color3.fromRGB(150, 150, 200)
+ATStroke.Thickness = 2
+ATStroke.Transparency = 0.3
+ATStroke.Parent = AutoToggleBtn
+
+-- ============================================
+-- TOMBOL SET
+-- ============================================
+local SetBtn = Instance.new("TextButton")
+SetBtn.Size = UDim2.new(0, 55, 0, 55)
+SetBtn.Position = UDim2.new(0, 20, 0.5, 125)
+SetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
+SetBtn.Text = "⚙️"
+SetBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+SetBtn.TextSize = 26
+SetBtn.Font = Enum.Font.GothamBold
+SetBtn.Active = true
+SetBtn.AutoButtonColor = false
+SetBtn.Parent = ScreenGui
+
+local SEC = Instance.new("UICorner")
+SEC.CornerRadius = UDim.new(1, 0)
+SEC.Parent = SetBtn
+
+local SETStroke = Instance.new("UIStroke")
+SETStroke.Color = Color3.fromRGB(150, 150, 255)
+SETStroke.Thickness = 2
+SETStroke.Transparency = 0.3
+SETStroke.Parent = SetBtn
+
+-- ============================================
+-- GUI BESAR
+-- ============================================
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 300, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -150, 0.5, -125)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+MainFrame.BorderSizePixel = 0
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+
+local UIC = Instance.new("UICorner")
+UIC.CornerRadius = UDim.new(0, 12)
+UIC.Parent = MainFrame
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 36)
+TitleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+
+local TBC = Instance.new("UICorner")
+TBC.CornerRadius = UDim.new(0, 12)
+TBC.Parent = TitleBar
+
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -60, 1, 0)
+Title.Position = UDim2.new(0, 12, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "⚙️ uwaiS Menu"
+Title.TextColor3 = Color3.fromRGB(0, 255, 100)
+Title.TextSize = 15
+Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position = UDim2.new(1, -35, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize = 14
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = TitleBar
+
+local CBC = Instance.new("UICorner")
+CBC.CornerRadius = UDim.new(1, 0)
+CBC.Parent = CloseBtn
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    SetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
+end)
+
+local Container = Instance.new("Frame")
+Container.Size = UDim2.new(1, -20, 1, -56)
+Container.Position = UDim2.new(0, 10, 0, 46)
+Container.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+Container.BorderSizePixel = 0
+Container.Parent = MainFrame
+
+local CC = Instance.new("UICorner")
+CC.CornerRadius = UDim.new(0, 6)
+CC.Parent = Container
+
+local ESPMurderBtn = Instance.new("TextButton")
+ESPMurderBtn.Size = UDim2.new(1, -20, 0, 35)
+ESPMurderBtn.Position = UDim2.new(0, 10, 0, 10)
+ESPMurderBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
+ESPMurderBtn.Text = "🎯 ESP MURDER: OFF"
+ESPMurderBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+ESPMurderBtn.TextSize = 13
+ESPMurderBtn.Font = Enum.Font.GothamBold
+ESPMurderBtn.Parent = Container
+
+local EMC = Instance.new("UICorner")
+EMC.CornerRadius = UDim.new(0, 6)
+EMC.Parent = ESPMurderBtn
+
+local ESPSheriffBtn = Instance.new("TextButton")
+ESPSheriffBtn.Size = UDim2.new(1, -20, 0, 35)
+ESPSheriffBtn.Position = UDim2.new(0, 10, 0, 52)
+ESPSheriffBtn.BackgroundColor3 = Color3.fromRGB(30, 50, 80)
+ESPSheriffBtn.Text = "🎯 ESP SHERIFF: OFF"
+ESPSheriffBtn.TextColor3 = Color3.fromRGB(100, 150, 255)
+ESPSheriffBtn.TextSize = 13
+ESPSheriffBtn.Font = Enum.Font.GothamBold
+ESPSheriffBtn.Parent = Container
+
+local ESC = Instance.new("UICorner")
+ESC.CornerRadius = UDim.new(0, 6)
+ESC.Parent = ESPSheriffBtn
+
+local ESPInnocentBtn = Instance.new("TextButton")
+ESPInnocentBtn.Size = UDim2.new(1, -20, 0, 35)
+ESPInnocentBtn.Position = UDim2.new(0, 10, 0, 94)
+ESPInnocentBtn.BackgroundColor3 = Color3.fromRGB(30, 80, 30)
+ESPInnocentBtn.Text = "🎯 ESP INNOCENT: OFF"
+ESPInnocentBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+ESPInnocentBtn.TextSize = 13
+ESPInnocentBtn.Font = Enum.Font.GothamBold
+ESPInnocentBtn.Parent = Container
+
+local EIC = Instance.new("UICorner")
+EIC.CornerRadius = UDim.new(0, 6)
+EIC.Parent = ESPInnocentBtn
+
+local DeleteAllBtn = Instance.new("TextButton")
+DeleteAllBtn.Size = UDim2.new(1, -20, 0, 40)
+DeleteAllBtn.Position = UDim2.new(0, 10, 0, 138)
+DeleteAllBtn.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+DeleteAllBtn.Text = "🗑️ HAPUS SEMUA"
+DeleteAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+DeleteAllBtn.TextSize = 14
+DeleteAllBtn.Font = Enum.Font.GothamBold
+DeleteAllBtn.Parent = Container
+
+local DAC = Instance.new("UICorner")
+DAC.CornerRadius = UDim.new(0, 6)
+DAC.Parent = DeleteAllBtn
+
+-- ============================================
+-- HANDLE TOMBOL
+-- ============================================
+ESPMurderBtn.MouseButton1Click:Connect(function()
+    Config.ESPMurder = not Config.ESPMurder
+    if Config.ESPMurder then
+        ESPMurderBtn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+        ESPMurderBtn.Text = "🎯 ESP MURDER: ON"
+        ESPMurderBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        ESPMurderBtn.BackgroundColor3 = Color3.fromRGB(80, 30, 30)
+        ESPMurderBtn.Text = "🎯 ESP MURDER: OFF"
+        ESPMurderBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    end
+    UpdateESP()
+end)
+
+ESPSheriffBtn.MouseButton1Click:Connect(function()
+    Config.ESPSheriff = not Config.ESPSheriff
+    if Config.ESPSheriff then
+        ESPSheriffBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 255)
+        ESPSheriffBtn.Text = "🎯 ESP SHERIFF: ON"
+        ESPSheriffBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        ESPSheriffBtn.BackgroundColor3 = Color3.fromRGB(30, 50, 80)
+        ESPSheriffBtn.Text = "🎯 ESP SHERIFF: OFF"
+        ESPSheriffBtn.TextColor3 = Color3.fromRGB(100, 150, 255)
+    end
+    UpdateESP()
+end)
+
+ESPInnocentBtn.MouseButton1Click:Connect(function()
+    Config.ESPInnocent = not Config.ESPInnocent
+    if Config.ESPInnocent then
+        ESPInnocentBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 0)
+        ESPInnocentBtn.Text = "🎯 ESP INNOCENT: ON"
+        ESPInnocentBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        ESPInnocentBtn.BackgroundColor3 = Color3.fromRGB(30, 80, 30)
+        ESPInnocentBtn.Text = "🎯 ESP INNOCENT: OFF"
+        ESPInnocentBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+    end
+    UpdateESP()
+end)
+
+DeleteAllBtn.MouseButton1Click:Connect(function()
+    Running = false
+    for plr, hl in pairs(Highlights) do
+        pcall(function() hl:Destroy() end)
+    end
+    Highlights = {}
+    LastRoles = {}
+    LastCharacters = {}
+    pcall(function() ScreenGui:Destroy() end)
+    print("[uwaiS] Semua fitur dihapus. Developer: uwaiS")
+end)
+
+-- ============================================
+-- DRAG + INSTANT CALLBACK
+-- ============================================
+MakeDraggable(ShootManualBtn, function()
+    -- INSTANT: ambil target + fire langsung tanpa delay
+    local murder = Config.CurrentTarget or GetMurder()
+    if not murder then
+        ShootManualBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        task.delay(0.1, function()
+            ShootManualBtn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+        end)
+        return
+    end
+    Config.CurrentTarget = murder
+    
+    -- FIRE INSTANT
+    if FireInstant(murder) then
+        ShootManualBtn.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+        task.delay(0.1, function()
+            ShootManualBtn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+        end)
+    else
+        ShootManualBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+        task.delay(0.1, function()
+            ShootManualBtn.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+        end)
+    end
+end)
+
+MakeDraggable(AutoToggleBtn, function()
+    Config.AutoShoot = not Config.AutoShoot
+    if Config.AutoShoot then
+        AutoToggleBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100)
+        ATStroke.Color = Color3.fromRGB(100, 255, 150)
+    else
+        AutoToggleBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 120)
+        ATStroke.Color = Color3.fromRGB(150, 150, 200)
+    end
+end)
+
+MakeDraggable(SetBtn, function()
+    MainFrame.Visible = not MainFrame.Visible
+    if MainFrame.Visible then
+        SetBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+    else
+        SetBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
+    end
+end)
+
+-- ============================================
+-- LOOP
+-- ============================================
+task.spawn(function()
+    while Running and task.wait(0.2) do
+        if not ShootRemote or not ShootRemote.Parent then
+            ShootRemote = nil
+            FindRemote()
+        end
+    end
+end)
+
+task.spawn(function()
+    while Running and task.wait(0.05) do
+        UpdateESP()
+    end
+end)
+
+task.spawn(function()
+    while Running and task.wait(0.5) do
+        local murder = GetMurder()
+        if murder then Config.CurrentTarget = murder end
+    end
+end)
+
+task.spawn(function()
+    while Running and task.wait(Config.AutoShootDelay) do
+        if Config.AutoShoot then
+            local murder = Config.CurrentTarget or GetMurder()
+            if murder then FireInstant(murder) end
+        end
+    end
+end)
+
+FindRemote()
+
+print("[uwaiS Silent v18] Loaded! Developer: uwaiS")
